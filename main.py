@@ -57,7 +57,7 @@ def get_hungry_meals(postcode: str = "NW4 2RR"):
     querystring = {"location": postcode, "keyword": "chicken"}
     
     headers = {
-        "x-rapidapi-key": "PASTE_YOUR_API_KEY_HERE", # <--- DO NOT FORGET TO PASTE THIS!
+        "x-rapidapi-key": "5ceb67f994mshe7a8f56e18d1245p1fea92jsn074961c958f",
         "x-rapidapi-host": "uber-eats-scraper-api.p.rapidapi.com"
     }
     
