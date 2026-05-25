@@ -49,31 +49,43 @@ def process_uber_eats_data(raw_restaurant_data):
 # ---------------------------------------------------------
 @app.get("/api/hungry")
 def get_hungry_meals(postcode: str = "NW4 2RR"):
-    # 1. We are using a search endpoint (you can change this URL to match the exact 
-    # endpoint you are testing in the RapidAPI playground, like a specific restaurant menu)
-    url = "https://uber-eats-scraper-api.p.rapidapi.com/restaurants/search"
     
-    # We pass a location query to the API so it finds food near you
-    querystring = {"location": postcode, "keyword": "chicken"}
+    # 1. The exact URL from your screenshot
+    url = "https://uber-eats-scraper-api.p.rapidapi.com/api/job"
     
+    # 2. The exact JSON payload from your screenshot
+    payload = {
+        "scraper": {
+            "maxRows": 15,
+            "query": "chicken",
+            "address": postcode, 
+            "locale": "en-GB", # Set to GB for London
+            "page": 1,
+            "getMenuCustomizations": False
+        }
+    }
+    
+    # 3. The Headers (Notice we added the Content-Type!)
     headers = {
-        "x-rapidapi-key": "5ceb67f994mshe7a8f56e18d1245p1fea92jsn074961c958f",
+        "content-type": "application/json",
+        "x-rapidapi-key": "PASTE_YOUR_KEY_HERE", # Keep this secret!
         "x-rapidapi-host": "uber-eats-scraper-api.p.rapidapi.com"
     }
     
     try:
-        response = requests.get(url, headers=headers, params=querystring)
+        # 4. We use requests.post() instead of requests.get()
+        response = requests.post(url, json=payload, headers=headers)
         live_api_data = response.json()
 
-    # --- THE SECRET INTERCEPTOR ---
+        # --- THE SECRET INTERCEPTOR ---
         print("=== RAW RAPIDAPI DATA ===")
         print(live_api_data)
-        # ------------------------------
-    
+        
+        # Temporarily return the raw data directly so Claude prints it on your screen!
+        return {"status": "success", "raw_data": live_api_data}
+
     except Exception as e:
-        return {"status": "error", "message": "Failed to connect to RapidAPI."}
-    
-    formatted_data_for_engine = []
+        return {"status": "error", "message": f"Failed to connect: {str(e)}"}
     
     # 2. THE TRANSLATION LAYER
     # Note: If the API returns an error or empty list, this safely skips it.
