@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 import requests
 import json
+import urllib.parse
 
 app = FastAPI(title="Protein Eats Finder API")
 
@@ -30,7 +31,9 @@ def process_uber_eats_data(raw_restaurant_data):
         is_ratio_approved = True 
         # (We are temporarily letting everything through just to test!)
             
-        deep_link = f"https://www.ubereats.com/store/{item['store_slug']}/{item['store_uuid']}?pl={item['item_uuid']}"
+        # Inside your loop...
+        encoded_name = urllib.parse.quote_plus(item['item_name'])
+        deep_link = f"https://www.ubereats.com/store/{item['store_slug']}/{item['store_uuid']}?q={encoded_name}"
         
         approved_meals.append({
             "name": item['item_name'],
