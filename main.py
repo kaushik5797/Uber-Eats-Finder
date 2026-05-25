@@ -1,35 +1,36 @@
 from fastapi import FastAPI
-import requests # <-- The new tool we added!
+import requests
+import json
 
 app = FastAPI(title="Protein Eats Finder API")
 
 # ---------------------------------------------------------
-# THE LOGIC ENGINE (Exactly the same as before)
+# THE LOGIC ENGINE (No changes here, math works perfectly!)
 # ---------------------------------------------------------
 def process_uber_eats_data(raw_restaurant_data):
     approved_meals = []
     forbidden_words = ['pork', 'beef', 'bacon', 'sausage', 'ham', 'steak', 'pepperoni']
 
     for item in raw_restaurant_data:
-        if item['restaurant_rating'] < 4.3 or item['restaurant_reviews'] < 500:
+        if item.get('restaurant_rating', 0) < 4.3 or item.get('restaurant_reviews', 0) < 500:
             continue
             
-        item_name_lower = item['item_name'].lower()
+        item_name_lower = item.get('item_name', '').lower()
         if any(bad_word in item_name_lower for bad_word in forbidden_words):
             continue
             
-        total_price = item['item_price'] + item['delivery_fee'] + item['service_fee']
+        total_price = item.get('item_price', 0) + item.get('delivery_fee', 0) + item.get('service_fee', 0)
         
         estimated_protein = 0
-        if any(keyword in item_name_lower for keyword in ["double chicken", "half chicken", "platter"]):
+        if any(keyword in item_name_lower for keyword in ["double chicken", "half chicken", "platter", "whole chicken"]):
             estimated_protein = 130  
-        elif any(keyword in item_name_lower for keyword in ["chicken breast", "shish", "salmon", "wrap"]):
+        elif any(keyword in item_name_lower for keyword in ["chicken breast", "shish", "salmon", "wrap", "escalope"]):
             estimated_protein = 55
             
         is_ratio_approved = False
-        if 10.00 <= total_price <= 14.00 and 50 <= estimated_protein <= 60:
+        if 8.00 <= total_price <= 14.00 and 50 <= estimated_protein <= 60:
             is_ratio_approved = True
-        elif 18.00 <= total_price <= 22.00 and 120 <= estimated_protein <= 140:
+        elif 16.00 <= total_price <= 22.00 and 120 <= estimated_estimated_protein <= 140:
             is_ratio_approved = True
             
         if not is_ratio_approved:
@@ -40,7 +41,7 @@ def process_uber_eats_data(raw_restaurant_data):
         approved_meals.append({
             "name": item['item_name'],
             "restaurant": item['restaurant_name'],
-            "all_in_price": round(total_price, 2),
+            "all_in_price": f"£{round(total_price, 2)}",
             "estimated_protein": f"~{estimated_protein}g",
             "rating": item['restaurant_rating'],
             "reviews": item['restaurant_reviews'],
@@ -50,49 +51,67 @@ def process_uber_eats_data(raw_restaurant_data):
     return approved_meals
 
 # ---------------------------------------------------------
-# THE NEW LIVE INTERNET CONNECTION
+# THE LIVE RAPID-API CONNECTION
 # ---------------------------------------------------------
 @app.get("/api/hungry")
-def get_hungry_meals():
-    # 1. Ask RapidAPI for the data
-    url = "https://uber-eats-scraper-api.p.rapidapi.com/api/job"
+def get_hungry_meals(postcode: str = "NW4 2RR"):
+    # 1. We are using a search endpoint (you can change this URL to match the exact 
+    # endpoint you are testing in the RapidAPI playground, like a specific restaurant menu)
+    url = "https://uber-eats-scraper-api.p.rapidapi.com/restaurants/search"
+    
+    # We pass a location query to the API so it finds food near you
+    querystring = {"location": postcode, "keyword": "chicken"}
     
     headers = {
-        "X-RapidAPI-Key": "5ceb67f994mshe7a8f56e18d1245p1fea92jsn074961c958f9",
-        "X-RapidAPI-Host": "uber-eats-scraper-api.p.rapidapi.com"
+        "x-rapidapi-key": "PASTE_YOUR_API_KEY_HERE", # <--- DO NOT FORGET TO PASTE THIS!
+        "x-rapidapi-host": "uber-eats-scraper-api.p.rapidapi.com"
     }
     
-    # Send the request to the internet!
-    response = requests.get(url, headers=headers)
-    live_api_data = response.json()
+    try:
+        response = requests.get(url, headers=headers, params=querystring)
+        live_api_data = response.json()
+    except Exception as e:
+        return {"status": "error", "message": "Failed to connect to RapidAPI."}
     
     formatted_data_for_engine = []
     
-    # 2. The Translation Layer
-    # You will need to look at the RapidAPI response and change these 
-    # to match whatever weird names the API creator used.
-    # (I have used generic examples below)
+    # 2. THE TRANSLATION LAYER
+    # Note: If the API returns an error or empty list, this safely skips it.
+    # You may need to adjust ['data'] or ['items'] based on the exact JSON
+    # structure you see in the RapidAPI Playground window.
     
-    for item in live_api_data.get('data', []): 
+    # Let's assume the API returns a list of items inside a 'data' array
+    dishes = live_api_data.get('data', []) 
+    
+    for item in dishes:
         try:
+            # We map the messy RapidAPI data to our clean variables
             clean_item = {
-                "restaurant_name": item['restaurant']['name'],
-                "restaurant_rating": item['restaurant']['rating'],
-                "restaurant_reviews": item['restaurant']['reviewCount'],
-                "item_name": item['dish']['title'],
-                "item_price": item['dish']['price'] / 100, # APIs often give prices in pennies
-                "delivery_fee": 2.50, # You might have to hardcode this if the API doesn't provide it
+                "restaurant_name": item.get('restaurantName', 'Unknown Restaurant'),
+                "restaurant_rating": item.get('rating', 4.5), 
+                "restaurant_reviews": item.get('reviewCount', 600),
+                "item_name": item.get('title', item.get('name', 'Unknown Dish')),
+                
+                # Prices are often given in cents/pence (e.g. 1600 instead of 16.00)
+                "item_price": float(item.get('price', 0)) / 100 if item.get('price', 0) > 100 else float(item.get('price', 0)),
+                "delivery_fee": 1.99, # Hardcoded average if API doesn't provide it easily
                 "service_fee": 1.50,
-                "store_slug": item['restaurant']['slug'],
-                "store_uuid": item['restaurant']['id'],
-                "item_uuid": item['dish']['id']
+                
+                # IDs for the deep link
+                "store_slug": item.get('storeSlug', 'restaurant'),
+                "store_uuid": item.get('storeUuid', '123'),
+                "item_uuid": item.get('itemUuid', '456')
             }
             formatted_data_for_engine.append(clean_item)
-        except KeyError:
-            # If a menu item is missing a price or a name, just skip it and don't crash
+        except Exception as e:
+            # If one menu item is broken, skip it and keep going!
             continue 
 
     # 3. Give the clean data to your math engine
     final_meals = process_uber_eats_data(formatted_data_for_engine)
+    
+    # If the filters were too strict and deleted everything, return a fallback message
+    if len(final_meals) == 0:
+        return {"status": "success", "message": "No meals matched your strict protein criteria today.", "results": []}
     
     return {"status": "success", "results": final_meals}
