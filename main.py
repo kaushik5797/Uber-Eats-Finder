@@ -27,14 +27,8 @@ def process_uber_eats_data(raw_restaurant_data):
         elif any(keyword in item_name_lower for keyword in ["chicken breast", "shish", "salmon", "wrap", "escalope"]):
             estimated_protein = 55
             
-        is_ratio_approved = False
-        if 8.00 <= total_price <= 14.00 and 50 <= estimated_protein <= 60:
-            is_ratio_approved = True
-        elif 16.00 <= total_price <= 22.00 and 120 <= estimated_estimated_protein <= 140:
-            is_ratio_approved = True
-            
-        if not is_ratio_approved:
-            continue
+        is_ratio_approved = True 
+        # (We are temporarily letting everything through just to test!)
             
         deep_link = f"https://www.ubereats.com/store/{item['store_slug']}/{item['store_uuid']}?pl={item['item_uuid']}"
         
