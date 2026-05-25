@@ -64,6 +64,12 @@ def get_hungry_meals(postcode: str = "NW4 2RR"):
     try:
         response = requests.get(url, headers=headers, params=querystring)
         live_api_data = response.json()
+
+    # --- THE SECRET INTERCEPTOR ---
+        print("=== RAW RAPIDAPI DATA ===")
+        print(live_api_data)
+        # ------------------------------
+    
     except Exception as e:
         return {"status": "error", "message": "Failed to connect to RapidAPI."}
     
