@@ -5,7 +5,7 @@ import json
 app = FastAPI(title="Protein Eats Finder API")
 
 # ---------------------------------------------------------
-# THE LOGIC ENGINE (No changes here, math works perfectly!)
+# THE LOGIC ENGINE 
 # ---------------------------------------------------------
 def process_uber_eats_data(raw_restaurant_data):
     approved_meals = []
