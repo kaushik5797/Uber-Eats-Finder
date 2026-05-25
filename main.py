@@ -68,7 +68,7 @@ def get_hungry_meals(postcode: str = "NW4 2RR"):
     # 3. The Headers (Notice we added the Content-Type!)
     headers = {
         "content-type": "application/json",
-        "x-rapidapi-key": "PASTE_YOUR_KEY_HERE", # Keep this secret!
+        "x-rapidapi-key": "5ceb67f994mshe7a8f56e18d1245p1fea92jsn074961c958f9", 
         "x-rapidapi-host": "uber-eats-scraper-api.p.rapidapi.com"
     }
     
