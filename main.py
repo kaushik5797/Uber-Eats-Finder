@@ -7,23 +7,27 @@ import json
 app = FastAPI(title="Protein Eats Finder API")
 
 # ---------------------------------------------------------
-# THE LOGIC ENGINE 
+# THE LOGIC ENGINE (ALL FILTERS DISABLED)
 # ---------------------------------------------------------
 def process_uber_eats_data(raw_restaurant_data, protein_choice):
     approved_meals = []
-    forbidden_words = ['pork', 'bacon', 'sausage', 'ham', 'pepperoni']
+    # forbidden_words = ['pork', 'bacon', 'sausage', 'ham', 'pepperoni']
 
     for item in raw_restaurant_data:
-        # Lowered review requirement slightly to 50 in case data is sparse
-        if item.get('restaurant_rating', 0) < 4.0 or item.get('restaurant_reviews', 0) < 50:
-            continue
+        
+        # --- 1. QUALITY FILTER BYPASSED ---
+        # if item.get('restaurant_rating', 0) < 4.0 or item.get('restaurant_reviews', 0) < 50:
+        #     continue
             
         item_name_lower = item.get('item_name', '').lower()
-        if any(bad_word in item_name_lower for bad_word in forbidden_words):
-            continue
+        
+        # --- 2. DIETARY FILTER BYPASSED ---
+        # if any(bad_word in item_name_lower for bad_word in forbidden_words):
+        #     continue
             
         total_price = item.get('item_price', 0) + item.get('delivery_fee', 0) + item.get('service_fee', 0)
         
+        # --- DYNAMIC PROTEIN HEURISTICS (Still active so your UI looks good) ---
         estimated_protein = 0
         if protein_choice == "chicken":
             if any(keyword in item_name_lower for keyword in ["double", "half", "platter", "whole"]):
@@ -41,21 +45,13 @@ def process_uber_eats_data(raw_restaurant_data, protein_choice):
             elif any(keyword in item_name_lower for keyword in ["kebab", "shish", "rogan josh", "tikka", "curry"]):
                 estimated_protein = 55
 
-        # --- THE SAFETY NET ---
-        # If the dish didn't have specific keywords but survived the filters, 
-        # assume a baseline of 45g of protein so it isn't automatically deleted!
+        # Safety Net (Defaults to 45g if no keywords match)
         if estimated_protein == 0:
             estimated_protein = 45
 
-        is_ratio_approved = False
-        
-        # Scenario 1: Up to £20 (Allows ~£16 for food + £4 in fees)
-        if 8.00 <= total_price <= 20.00 and 40 <= estimated_protein <= 70:
-            is_ratio_approved = True
-            
-        # Scenario 2: Up to £35 for large platters/whole chickens
-        elif 18.00 <= total_price <= 35.00 and 120 <= estimated_protein <= 140:
-            is_ratio_approved = True
+        # --- 3. THE BOUNCER BYPASSED ---
+        # We automatically approve every single meal, regardless of price!
+        is_ratio_approved = True
             
         if not is_ratio_approved:
             continue
@@ -67,8 +63,8 @@ def process_uber_eats_data(raw_restaurant_data, protein_choice):
             "restaurant": item['restaurant_name'],
             "all_in_price": f"£{round(total_price, 2)}",
             "estimated_protein": f"~{estimated_protein}g",
-            "rating": item['restaurant_rating'],
-            "reviews": item['restaurant_reviews'],
+            "rating": item.get('restaurant_rating', 'N/A'), # Added N/A fallback for missing ratings
+            "reviews": item.get('restaurant_reviews', 'N/A'),
             "order_link": deep_link
         })
         
@@ -84,7 +80,7 @@ def get_hungry_meals(postcode: str = "NW4 2RR", protein: str = "chicken"):
     
     payload = {
         "scraper": {
-            "maxRows": 50, # Increased to 50 to guarantee we hit good inventory
+            "maxRows": 50, 
             "query": protein, 
             "address": postcode, 
             "locale": "en-GB", 
@@ -130,7 +126,7 @@ def get_hungry_meals(postcode: str = "NW4 2RR", protein: str = "chicken"):
     final_meals = process_uber_eats_data(formatted_data_for_engine, protein.lower())
     
     if len(final_meals) == 0:
-        fallback = {"status": "success", "message": f"No {protein} meals matched your strict protein criteria today.", "results": []}
+        fallback = {"status": "success", "message": f"No {protein} meals found on Uber Eats for this postcode right now.", "results": []}
         return PlainTextResponse(content=json.dumps(fallback))
     
     success_data = {"status": "success", "results": final_meals}
