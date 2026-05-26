@@ -71,7 +71,7 @@ def process_uber_eats_data(raw_restaurant_data, protein_choice):
     return approved_meals
 
 # ---------------------------------------------------------
-# THE LIVE RAPID-API CONNECTION
+# THE LIVE RAPID-API CONNECTION (NAKED TEST MODE)
 # ---------------------------------------------------------
 @app.get("/api/hungry")
 def get_hungry_meals(postcode: str = "NW4 2RR", protein: str = "chicken"):
@@ -80,7 +80,7 @@ def get_hungry_meals(postcode: str = "NW4 2RR", protein: str = "chicken"):
     
     payload = {
         "scraper": {
-            "maxRows": 50, 
+            "maxRows": 10, # Keep it small so it doesn't overwhelm the screen
             "query": protein, 
             "address": postcode, 
             "locale": "en-GB", 
@@ -98,36 +98,10 @@ def get_hungry_meals(postcode: str = "NW4 2RR", protein: str = "chicken"):
     try:
         response = requests.post(url, json=payload, headers=headers)
         live_api_data = response.json()
+        
+        # WE BYPASS EVERYTHING AND RETURN THE RAW DATA DIRECTLY TO CLAUDE
+        return PlainTextResponse(content=json.dumps(live_api_data))
+        
     except Exception as e:
-        error_msg = {"status": "error", "message": "Failed to connect to RapidAPI."}
+        error_msg = {"status": "error", "message": f"Failed to connect: {str(e)}"}
         return PlainTextResponse(content=json.dumps(error_msg))
-    
-    formatted_data_for_engine = []
-    dishes = live_api_data.get('data', []) 
-    
-    for item in dishes:
-        try:
-            clean_item = {
-                "restaurant_name": item.get('restaurantName', 'Unknown Restaurant'),
-                "restaurant_rating": item.get('rating', 4.5), 
-                "restaurant_reviews": item.get('reviewCount', 600),
-                "item_name": item.get('title', item.get('name', 'Unknown Dish')),
-                "item_price": float(item.get('price', 0)) / 100 if item.get('price', 0) > 100 else float(item.get('price', 0)),
-                "delivery_fee": 1.99, 
-                "service_fee": 1.50,
-                "store_slug": item.get('storeSlug', 'restaurant'),
-                "store_uuid": item.get('storeUuid', '123'),
-                "item_uuid": item.get('itemUuid', item.get('id', '456'))
-            }
-            formatted_data_for_engine.append(clean_item)
-        except Exception as e:
-            continue 
-
-    final_meals = process_uber_eats_data(formatted_data_for_engine, protein.lower())
-    
-    if len(final_meals) == 0:
-        fallback = {"status": "success", "message": f"No {protein} meals found on Uber Eats for this postcode right now.", "results": []}
-        return PlainTextResponse(content=json.dumps(fallback))
-    
-    success_data = {"status": "success", "results": final_meals}
-    return PlainTextResponse(content=json.dumps(success_data))
