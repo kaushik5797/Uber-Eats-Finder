@@ -37,9 +37,9 @@ def process_uber_eats_data(raw_restaurant_data, protein_choice):
                 
         elif protein_choice == "fish":
             if any(keyword in item_name_lower for keyword in ["salmon", "seabass", "mixed grill"]):
-                estimated_protein = 55
+                estimated_protein = 130
             elif any(keyword in item_name_lower for keyword in ["tuna", "cod", "fillet"]):
-                estimated_protein = 40
+                estimated_protein = 55
                 
         elif protein_choice in ["lamb", "mutton"]:
             if any(keyword in item_name_lower for keyword in ["chops", "shank", "platter", "mixed grill"]):
