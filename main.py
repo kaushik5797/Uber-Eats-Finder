@@ -1,37 +1,63 @@
 from fastapi import FastAPI
 import requests
-import json
 import urllib.parse
 
 app = FastAPI(title="Protein Eats Finder API")
 
 # ---------------------------------------------------------
-# THE LOGIC ENGINE 
+# THE LOGIC ENGINE (Now with dynamic meats!)
 # ---------------------------------------------------------
-def process_uber_eats_data(raw_restaurant_data):
+def process_uber_eats_data(raw_restaurant_data, protein_choice):
     approved_meals = []
-    forbidden_words = ['pork', 'beef', 'bacon', 'sausage', 'ham', 'steak', 'pepperoni']
+    # If they are searching for lamb/mutton, we shouldn't ban beef/steak just in case they overlap,
+    # but we'll leave pork and bacon on the universal ban list for clean macros.
+    forbidden_words = ['pork', 'bacon', 'sausage', 'ham', 'pepperoni']
 
     for item in raw_restaurant_data:
+        # 1. Quality Filter
         if item.get('restaurant_rating', 0) < 4.3 or item.get('restaurant_reviews', 0) < 500:
             continue
             
+        # 2. Dietary Filter
         item_name_lower = item.get('item_name', '').lower()
         if any(bad_word in item_name_lower for bad_word in forbidden_words):
             continue
             
+        # 3. Financial Math
         total_price = item.get('item_price', 0) + item.get('delivery_fee', 0) + item.get('service_fee', 0)
         
+        # 4. Dynamic Protein Heuristics based on what the user asked for
         estimated_protein = 0
-        if any(keyword in item_name_lower for keyword in ["double chicken", "half chicken", "platter", "whole chicken"]):
-            estimated_protein = 130  
-        elif any(keyword in item_name_lower for keyword in ["chicken breast", "shish", "salmon", "wrap", "escalope"]):
-            estimated_protein = 55
+        
+        if protein_choice == "chicken":
+            if any(keyword in item_name_lower for keyword in ["double chicken", "half chicken", "platter", "whole"]):
+                estimated_protein = 130  
+            elif any(keyword in item_name_lower for keyword in ["breast", "shish", "wrap", "escalope"]):
+                estimated_protein = 55
+                
+        elif protein_choice == "fish":
+            if any(keyword in item_name_lower for keyword in ["salmon", "seabass", "mixed grill"]):
+                estimated_protein = 55
+            elif any(keyword in item_name_lower for keyword in ["tuna", "cod", "fillet"]):
+                estimated_protein = 40
+                
+        elif protein_choice in ["lamb", "mutton"]:
+            if any(keyword in item_name_lower for keyword in ["chops", "shank", "platter", "mixed grill"]):
+                estimated_protein = 130
+            elif any(keyword in item_name_lower for keyword in ["kebab", "shish", "rogan josh", "tikka", "curry"]):
+                estimated_protein = 55
+
+        # 5. The Strict Ratio Filter (The Bouncer)
+        is_ratio_approved = False
+        if 8.00 <= total_price <= 15.00 and 40 <= estimated_protein <= 60:
+            is_ratio_approved = True
+        elif 16.00 <= total_price <= 23.00 and 120 <= estimated_protein <= 140:
+            is_ratio_approved = True
             
-        is_ratio_approved = True 
-        # (We are temporarily letting everything through just to test!)
+        if not is_ratio_approved:
+            continue
             
-        # Inside your loop...
+        # 6. The Deep Link
         encoded_name = urllib.parse.quote_plus(item['item_name'])
         deep_link = f"https://www.ubereats.com/store/{item['store_slug']}/{item['store_uuid']}?q={encoded_name}"
         
@@ -50,25 +76,24 @@ def process_uber_eats_data(raw_restaurant_data):
 # ---------------------------------------------------------
 # THE LIVE RAPID-API CONNECTION
 # ---------------------------------------------------------
+# We added 'protein' to the endpoint parameters! Default is chicken.
 @app.get("/api/hungry")
-def get_hungry_meals(postcode: str = "NW4 2RR"):
+def get_hungry_meals(postcode: str = "NW4 2RR", protein: str = "chicken"):
     
-    # 1. The exact URL from your screenshot
     url = "https://uber-eats-scraper-api.p.rapidapi.com/api/job"
     
-    # 2. The exact JSON payload from your screenshot
+    # We pass the user's protein choice directly into the Uber Eats search bar!
     payload = {
         "scraper": {
-            "maxRows": 15,
-            "query": "chicken",
+            "maxRows": 25, 
+            "query": protein, 
             "address": postcode, 
-            "locale": "en-GB", # Set to GB for London
+            "locale": "en-GB", 
             "page": 1,
             "getMenuCustomizations": False
         }
     }
     
-    # 3. The Headers (Notice we added the Content-Type!)
     headers = {
         "content-type": "application/json",
         "x-rapidapi-key": "5ceb67f994mshe7a8f56e18d1245p1fea92jsn074961c958f9", 
@@ -76,57 +101,36 @@ def get_hungry_meals(postcode: str = "NW4 2RR"):
     }
     
     try:
-        # 4. We use requests.post() instead of requests.get()
         response = requests.post(url, json=payload, headers=headers)
         live_api_data = response.json()
-
-        # --- THE SECRET INTERCEPTOR ---
-        print("=== RAW RAPIDAPI DATA ===")
-        print(live_api_data)
-        
-        # Temporarily return the raw data directly so Claude prints it on your screen!
-        return {"status": "success", "raw_data": live_api_data}
-
     except Exception as e:
-        return {"status": "error", "message": f"Failed to connect: {str(e)}"}
+        return {"status": "error", "message": "Failed to connect to RapidAPI."}
     
-    # 2. THE TRANSLATION LAYER
-    # Note: If the API returns an error or empty list, this safely skips it.
-    # You may need to adjust ['data'] or ['items'] based on the exact JSON
-    # structure you see in the RapidAPI Playground window.
-    
-    # Let's assume the API returns a list of items inside a 'data' array
+    formatted_data_for_engine = []
     dishes = live_api_data.get('data', []) 
     
     for item in dishes:
         try:
-            # We map the messy RapidAPI data to our clean variables
             clean_item = {
                 "restaurant_name": item.get('restaurantName', 'Unknown Restaurant'),
                 "restaurant_rating": item.get('rating', 4.5), 
                 "restaurant_reviews": item.get('reviewCount', 600),
                 "item_name": item.get('title', item.get('name', 'Unknown Dish')),
-                
-                # Prices are often given in cents/pence (e.g. 1600 instead of 16.00)
                 "item_price": float(item.get('price', 0)) / 100 if item.get('price', 0) > 100 else float(item.get('price', 0)),
-                "delivery_fee": 1.99, # Hardcoded average if API doesn't provide it easily
+                "delivery_fee": 1.99, 
                 "service_fee": 1.50,
-                
-                # IDs for the deep link
                 "store_slug": item.get('storeSlug', 'restaurant'),
-                "store_uuid": item.get('storeUuid', '123'),
-                "item_uuid": item.get('itemUuid', '456')
+                "store_uuid": item.get('storeUuid', '123')
             }
             formatted_data_for_engine.append(clean_item)
         except Exception as e:
-            # If one menu item is broken, skip it and keep going!
             continue 
 
-    # 3. Give the clean data to your math engine
-    final_meals = process_uber_eats_data(formatted_data_for_engine)
+    # We now pass BOTH the data and the user's protein choice to the math engine
+    # so it knows which macros to calculate!
+    final_meals = process_uber_eats_data(formatted_data_for_engine, protein.lower())
     
-    # If the filters were too strict and deleted everything, return a fallback message
     if len(final_meals) == 0:
-        return {"status": "success", "message": "No meals matched your strict protein criteria today.", "results": []}
+        return {"status": "success", "message": f"No {protein} meals matched your strict protein criteria today.", "results": []}
     
     return {"status": "success", "results": final_meals}
