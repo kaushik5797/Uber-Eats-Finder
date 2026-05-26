@@ -14,22 +14,19 @@ def process_uber_eats_data(raw_restaurant_data, protein_choice):
     forbidden_words = ['pork', 'bacon', 'sausage', 'ham', 'pepperoni']
 
     for item in raw_restaurant_data:
-        # 1. Quality Filter (Adjusted for London reality)
-        if item.get('restaurant_rating', 0) < 4.0 or item.get('restaurant_reviews', 0) < 150:
+        # Lowered review requirement slightly to 50 in case data is sparse
+        if item.get('restaurant_rating', 0) < 4.0 or item.get('restaurant_reviews', 0) < 50:
             continue
             
-        # 2. Dietary Filter
         item_name_lower = item.get('item_name', '').lower()
         if any(bad_word in item_name_lower for bad_word in forbidden_words):
             continue
             
-        # 3. Financial Math
         total_price = item.get('item_price', 0) + item.get('delivery_fee', 0) + item.get('service_fee', 0)
         
-        # 4. Dynamic Protein Heuristics
         estimated_protein = 0
         if protein_choice == "chicken":
-            if any(keyword in item_name_lower for keyword in ["double chicken", "half chicken", "platter", "whole"]):
+            if any(keyword in item_name_lower for keyword in ["double", "half", "platter", "whole"]):
                 estimated_protein = 130  
             elif any(keyword in item_name_lower for keyword in ["breast", "shish", "wrap", "escalope"]):
                 estimated_protein = 55
@@ -44,17 +41,25 @@ def process_uber_eats_data(raw_restaurant_data, protein_choice):
             elif any(keyword in item_name_lower for keyword in ["kebab", "shish", "rogan josh", "tikka", "curry"]):
                 estimated_protein = 55
 
-        # 5. The Strict Ratio Filter (Adjusted for delivery/service fees)
+        # --- THE SAFETY NET ---
+        # If the dish didn't have specific keywords but survived the filters, 
+        # assume a baseline of 45g of protein so it isn't automatically deleted!
+        if estimated_protein == 0:
+            estimated_protein = 45
+
         is_ratio_approved = False
-        if 8.00 <= total_price <= 15.00 and 40 <= estimated_protein <= 60:
+        
+        # Scenario 1: Up to £20 (Allows ~£16 for food + £4 in fees)
+        if 8.00 <= total_price <= 20.00 and 40 <= estimated_protein <= 70:
             is_ratio_approved = True
-        elif 16.00 <= total_price <= 26.00 and 120 <= estimated_protein <= 140:
+            
+        # Scenario 2: Up to £35 for large platters/whole chickens
+        elif 18.00 <= total_price <= 35.00 and 120 <= estimated_protein <= 140:
             is_ratio_approved = True
             
         if not is_ratio_approved:
             continue
             
-        # 6. The Exact Dish Dialog Link
         deep_link = f"https://www.ubereats.com/store/{item['store_slug']}/{item['store_uuid']}?pl={item.get('item_uuid', '456')}"
         
         approved_meals.append({
@@ -79,7 +84,7 @@ def get_hungry_meals(postcode: str = "NW4 2RR", protein: str = "chicken"):
     
     payload = {
         "scraper": {
-            "maxRows": 40, # Cast a wider net
+            "maxRows": 50, # Increased to 50 to guarantee we hit good inventory
             "query": protein, 
             "address": postcode, 
             "locale": "en-GB", 
@@ -104,9 +109,6 @@ def get_hungry_meals(postcode: str = "NW4 2RR", protein: str = "chicken"):
     formatted_data_for_engine = []
     dishes = live_api_data.get('data', []) 
     
-    # ---------------------------------------------------------
-    # THE TRANSLATION LAYER
-    # ---------------------------------------------------------
     for item in dishes:
         try:
             clean_item = {
@@ -127,8 +129,6 @@ def get_hungry_meals(postcode: str = "NW4 2RR", protein: str = "chicken"):
 
     final_meals = process_uber_eats_data(formatted_data_for_engine, protein.lower())
     
-    # --- THE DISGUISE ---
-    # Wrap the final response in PlainTextResponse to bypass the Claude Zod validation bug
     if len(final_meals) == 0:
         fallback = {"status": "success", "message": f"No {protein} meals matched your strict protein criteria today.", "results": []}
         return PlainTextResponse(content=json.dumps(fallback))
