@@ -57,9 +57,9 @@ def process_uber_eats_data(raw_restaurant_data, protein_choice):
         if not is_ratio_approved:
             continue
             
-        # 6. The Deep Link
-        encoded_name = urllib.parse.quote_plus(item['item_name'])
-        deep_link = f"https://www.ubereats.com/store/{item['store_slug']}/{item['store_uuid']}?q={encoded_name}"
+        # 6. The Exact Dish Dialog Link
+        # We use ?pl= (Product Link) to target the exact modal popup
+        deep_link = f"https://www.ubereats.com/store/{item['store_slug']}/{item['store_uuid']}?pl={item['item_uuid']}"
         
         approved_meals.append({
             "name": item['item_name'],
